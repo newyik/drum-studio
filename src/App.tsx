@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { Entry, EntryType, StudioLocation } from './types';
-import { verifyTeacher } from './teacherAuth';
+import { readSchedule, scheduleRequest, sharedSchedule, verifyTeacher } from './teacherAuth';
 import { LOCATIONS, createSeed } from './mock';
 import {
   WEEKDAYS,
@@ -68,8 +68,12 @@ function loadStudents(): string[] {
 }
 
 function Studio({ demo }: { demo: boolean }) {
-  const [entries, setEntries] = useState<Entry[]>(() => demo ? createSeed(LOCATIONS[0].id, true) : loadEntries());
-  const [students, setStudents] = useState<string[]>(() => demo ? DEMO_STUDENTS : loadStudents());
+  const online = !demo && sharedSchedule;
+  const [token, setToken] = useState<string>();
+  const [publicEntries, setPublicEntries] = useState<Entry[]>([]);
+  const [syncError, setSyncError] = useState(false);
+  const [entries, setEntries] = useState<Entry[]>(() => online ? [] : demo ? createSeed(LOCATIONS[0].id, true) : loadEntries());
+  const [students, setStudents] = useState<string[]>(() => online ? [] : demo ? DEMO_STUDENTS : loadStudents());
   const [loginOpen, setLoginOpen] = useState(false);
   const [view, setView] = useState<'public' | 'admin'>('public');
   const [weekStart, setWeekStart] = useState<Date>(() => studioWeek());
@@ -77,7 +81,7 @@ function Studio({ demo }: { demo: boolean }) {
   const [storageError, setStorageError] = useState(false);
 
   useEffect(() => {
-    if (demo) return;
+    if (demo || online) return;
     try {
       localStorage.setItem(STUDENTS_KEY, JSON.stringify(students));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
@@ -85,15 +89,75 @@ function Studio({ demo }: { demo: boolean }) {
     } catch {
       setStorageError(true);
     }
-  }, [demo, entries, students]);
+  }, [demo, online, entries, students]);
+
+  useEffect(() => {
+    if (!online || view !== 'public') return;
+    let active = true;
+    let generation = 0;
+    async function refresh() {
+      const request = ++generation;
+      try {
+        const schedule = await readSchedule('drum_public_schedule');
+        if (!active || request !== generation) return;
+        setPublicEntries(schedule);
+        setSyncError(false);
+      } catch {
+        if (active && request === generation) setSyncError(true);
+      }
+    }
+    void refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [online, view]);
+
+  async function login(password: string) {
+    const result = await verifyTeacher(password);
+    if (!result) return null;
+    if (typeof result !== 'string') return () => setView('admin');
+    const [schedule, roster] = await Promise.all([
+      readSchedule('drum_entries', result),
+      scheduleRequest<{ name: string }[]>('drum_students?select=name&order=name', result),
+    ]);
+    return () => {
+      setEntries(schedule);
+      setStudents(roster.map(({ name }) => name));
+      setToken(result);
+      setView('admin');
+    };
+  }
+
+  function leaveAdmin() {
+    setView('public');
+    if (online) {
+      setToken(undefined);
+      setEntries([]);
+      setStudents([]);
+    }
+  }
 
   const locationEntries = useMemo(
     () => entries.filter((e) => e.locationId === location.id),
     [entries, location.id],
   );
 
-  function saveEntry(entry: Entry) {
-    if (entry.type === 'lesson' && entry.student) {
+  async function saveEntry(entry: Entry) {
+    if (online) {
+      await scheduleRequest('drum_entries?on_conflict=id', token, {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({
+          ...entry, student: entry.student ?? null, room: entry.room ?? null,
+          note: entry.note ?? null, openPractice: entry.openPractice ?? null,
+        }),
+      });
+    }
+    if (!online && entry.type === 'lesson' && entry.student) {
       const name = entry.student;
       setStudents((previous) => [...new Set([...previous, name])]);
     }
@@ -103,8 +167,20 @@ function Studio({ demo }: { demo: boolean }) {
     });
   }
 
-  function deleteEntry(id: string) {
+  async function deleteEntry(id: string) {
+    if (online) await scheduleRequest(`drum_entries?id=eq.${encodeURIComponent(id)}`, token, { method: 'DELETE' });
     setEntries((prev) => prev.filter((e) => e.id !== id));
+  }
+
+  async function addStudent(name: string) {
+    if (online) {
+      await scheduleRequest('drum_students?on_conflict=name', token, {
+        method: 'POST',
+        headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+        body: JSON.stringify({ name }),
+      });
+    }
+    setStudents((previous) => [...new Set([...previous, name])]);
   }
 
   function resetDemo() {
@@ -118,14 +194,14 @@ function Studio({ demo }: { demo: boolean }) {
   return (
     <div className="app">
       <header className="topbar">
-        <button className="brand" onClick={() => setView('public')}>
+        <button className="brand" onClick={leaveAdmin}>
           <span className="brand-mark">鼓</span>
           <span className="brand-text">鼓房课表</span>
         </button>
         <div className="topbar-actions">
           <a className="preview-link" href={demo ? '#' : '#demo'}>{demo ? '退出体验' : '体验版'}</a>
           <button className="ghost" onClick={() => {
-            if (view === 'admin') setView('public');
+            if (view === 'admin') leaveAdmin();
             else if (demo) setView('admin');
             else setLoginOpen(true);
           }}>
@@ -136,11 +212,13 @@ function Studio({ demo }: { demo: boolean }) {
 
       {demo && <p className="demo-banner">体验版 · 示例数据，本次修改仅在当前页面有效</p>}
 
+      {view === 'public' && syncError && <p className="error" role="alert">暂时无法刷新课表，请稍后重试。</p>}
+
       {storageError && <p className="error" role="alert">无法保存到浏览器，刷新后可能丢失本次修改。</p>}
 
       {view === 'public' ? (
         <PublicView
-          entries={locationEntries}
+          entries={online ? publicEntries.filter((entry) => entry.locationId === location.id) : locationEntries}
           location={location}
         />
       ) : (
@@ -151,18 +229,19 @@ function Studio({ demo }: { demo: boolean }) {
           location={location}
           onSave={saveEntry}
           onDelete={deleteEntry}
-          onReset={resetDemo}
+          onReset={online ? undefined : resetDemo}
           students={[...new Set([...students, ...locationEntries.flatMap((entry) => entry.type === 'lesson' && entry.student ? [entry.student] : [])])]}
-          onAddStudent={(name) => setStudents((previous) => [...new Set([...previous, name])])}
+          onAddStudent={addStudent}
         />
       )}
 
       {loginOpen && (
         <TeacherLogin
           onClose={() => setLoginOpen(false)}
-          onLogin={() => {
+          onVerify={login}
+          onLogin={(enter) => {
             setLoginOpen(false);
-            setView('admin');
+            enter();
           }}
         />
       )}
@@ -335,11 +414,11 @@ function PublicView({ entries, location }: PublicProps) {
 interface AdminProps extends WeekProps {
   entries: Entry[];
   location: StudioLocation;
-  onSave: (entry: Entry) => void;
-  onDelete: (id: string) => void;
-  onReset: () => void;
+  onSave: (entry: Entry) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onReset?: () => void;
   students: string[];
-  onAddStudent: (name: string) => void;
+  onAddStudent: (name: string) => Promise<void>;
 }
 
 function AdminView({
@@ -462,10 +541,8 @@ function AdminView({
       </div>
 
       <div className="admin-foot">
-        <button className="link-danger" onClick={onReset}>
-          重置示例数据
-        </button>
-        <span>原型阶段：数据只保存在这台设备</span>
+        {onReset && <button className="link-danger" onClick={onReset}>重置示例数据</button>}
+        <span>{onReset ? '本地课表' : '课表已连接云端'}</span>
       </div>
 
       {rosterOpen && (
@@ -479,12 +556,12 @@ function AdminView({
           weekDays={isos}
           entries={entries}
           onClose={() => setDraft(null)}
-          onSave={(entry) => {
-            onSave(entry);
+          onSave={async (entry) => {
+            await onSave(entry);
             setDraft(null);
           }}
-          onDelete={(id) => {
-            onDelete(id);
+          onDelete={async (id) => {
+            await onDelete(id);
             setDraft(null);
           }}
         />
@@ -500,8 +577,8 @@ interface SheetProps {
   weekDays: string[];
   entries: Entry[];
   onClose: () => void;
-  onSave: (entry: Entry) => void;
-  onDelete: (id: string) => void;
+  onSave: (entry: Entry) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }
 
 function EntrySheet({
@@ -516,6 +593,16 @@ function EntrySheet({
 }: SheetProps) {
   const [form, setForm] = useState<Entry>(initial);
   const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+
+  async function write(action: () => Promise<void>) {
+    if (pending) return;
+    setPending(true);
+    setError('');
+    try { await action(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : '无法保存，请重试。'); }
+    finally { setPending(false); }
+  }
 
   const update = (patch: Partial<Entry>) => {
     setForm((f) => ({ ...f, ...patch }));
@@ -550,22 +637,22 @@ function EntrySheet({
         return;
       }
     }
-    onSave({
+    void write(() => onSave({
       ...form,
       student: form.type === 'lesson' ? form.student?.trim() || undefined : undefined,
       room: form.type === 'lesson' || form.type === 'practice' ? form.room?.trim() || undefined : undefined,
       openPractice: form.type === 'practice' ? !!form.openPractice : undefined,
       note: form.note?.trim() || undefined,
-    });
+    }));
   }
 
   return (
-    <Sheet onClose={onClose}>
+    <Sheet onClose={() => { if (!pending) onClose(); }}>
       <form onSubmit={submit}>
         <div className="sheet-handle" />
         <div className="sheet-head">
           <h2 id="sheet-title">{isNew ? '添加时段' : '编辑时段'}</h2>
-          <button type="button" className="iconbtn" aria-label="关闭" onClick={onClose}>
+          <button type="button" className="iconbtn" aria-label="关闭" onClick={onClose} disabled={pending}>
             ×
           </button>
         </div>
@@ -690,7 +777,7 @@ function EntrySheet({
 
         {error && <p className="error" role="alert">{error}</p>}
 
-        <button className="btn-primary" type="submit">
+        <button className="btn-primary" type="submit" disabled={pending}>
           保存
         </button>
 
@@ -699,7 +786,7 @@ function EntrySheet({
             type="button"
             className="link-danger delete"
             onClick={() => {
-              if (window.confirm('删除这个时段？')) onDelete(form.id);
+              if (!pending && window.confirm('删除这个时段？')) void write(() => onDelete(form.id));
             }}
           >
             删除这个时段
@@ -742,14 +829,16 @@ function Sheet({ children, onClose }: { children: ReactNode; onClose: () => void
 
 function StudentRoster({ students, onAdd, onClose }: {
   students: string[];
-  onAdd: (name: string) => void;
+  onAdd: (name: string) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState('');
   const [status, setStatus] = useState('');
+  const [pending, setPending] = useState(false);
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
+    if (pending) return;
     const value = name.trim();
     if (!value) {
       setStatus('请输入学生姓名。');
@@ -759,9 +848,16 @@ function StudentRoster({ students, onAdd, onClose }: {
       setStatus('名单中已有这位学生。');
       return;
     }
-    onAdd(value);
-    setName('');
-    setStatus(`已添加 ${value}`);
+    setPending(true);
+    try {
+      await onAdd(value);
+      setName('');
+      setStatus(`已添加 ${value}`);
+    } catch (cause) {
+      setStatus(cause instanceof Error ? cause.message : '无法添加学生，请重试。');
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -778,7 +874,7 @@ function StudentRoster({ students, onAdd, onClose }: {
             setStatus('');
           }} />
         </div>
-        <button className="btn-primary" type="submit">添加学生</button>
+        <button className="btn-primary" type="submit" disabled={pending}>添加学生</button>
         <p className="hint" role="status">{status}</p>
       </form>
       {students.length ? (
@@ -790,7 +886,11 @@ function StudentRoster({ students, onAdd, onClose }: {
   );
 }
 
-function TeacherLogin({ onClose, onLogin }: { onClose: () => void; onLogin: () => void }) {
+function TeacherLogin({ onClose, onLogin, onVerify }: {
+  onClose: () => void;
+  onLogin: (enter: () => void) => void;
+  onVerify: (password: string) => Promise<(() => void) | null>;
+}) {
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -807,9 +907,9 @@ function TeacherLogin({ onClose, onLogin }: { onClose: () => void; onLogin: () =
     setPending(true);
     setError('');
     try {
-      const valid = await verifyTeacher(password);
+      const enter = await onVerify(password);
       if (closed.current) return;
-      if (valid) onLogin();
+      if (enter) onLogin(enter);
       else setError('密码不正确，请重试。');
     } catch (cause) {
       if (!closed.current) {

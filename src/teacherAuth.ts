@@ -3,6 +3,8 @@
 const { VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, VITE_DRUM_TEACHER_EMAIL, VITE_DRUM_TEACHER_ID } =
   import.meta.env;
 
+export const sharedSchedule = Boolean(VITE_SUPABASE_URL && VITE_SUPABASE_PUBLISHABLE_KEY && VITE_DRUM_TEACHER_EMAIL && VITE_DRUM_TEACHER_ID);
+
 export async function verifyTeacher(password: string) {
   const supabase = [VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, VITE_DRUM_TEACHER_EMAIL, VITE_DRUM_TEACHER_ID];
   if (supabase.some(Boolean) && !supabase.every(Boolean)) {
@@ -29,5 +31,27 @@ export async function verifyTeacher(password: string) {
   if (!remote) return response.status === 204;
 
   const session = await response.json();
-  return session.user?.id === VITE_DRUM_TEACHER_ID && !!session.access_token;
+  return session.user?.id === VITE_DRUM_TEACHER_ID && typeof session.access_token === 'string' ? session.access_token : false;
+}
+
+export async function scheduleRequest<T>(resource: string, token?: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set('apikey', VITE_SUPABASE_PUBLISHABLE_KEY);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (init.body) headers.set('Content-Type', 'application/json');
+  const response = await fetch(new URL(`/rest/v1/${resource}`, VITE_SUPABASE_URL), { ...init, headers });
+  if (response.status === 401 || response.status === 403) throw new Error('登录已失效或权限不足，请重新登录。');
+  if (response.status === 409) throw new Error('安排与现有时段冲突，请刷新课表后重试。');
+  if (!response.ok) throw new Error('无法同步课表，请稍后重试。');
+  const body = await response.text();
+  return (body ? JSON.parse(body) : undefined) as T;
+}
+
+export async function readSchedule(resource: string, token?: string) {
+  const entries = [];
+  for (let offset = 0; ; offset += 500) {
+    const batch = await scheduleRequest<import('./types').Entry[]>(`${resource}?order=id&limit=500&offset=${offset}`, token);
+    entries.push(...batch);
+    if (batch.length < 500) return entries;
+  }
 }

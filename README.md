@@ -47,8 +47,9 @@ npm install --cache .npm-cache
 - `VITE_DRUM_TEACHER_EMAIL`：已在 Auth 中创建的老师邮箱
 - `VITE_DRUM_TEACHER_ID`：该老师账号的 Auth User UID
 
-老师密码在 Supabase Auth 账号中设置。当前课表仍保存在浏览器；
-跨设备同步和私有数据的访问权限需要单独接入 Supabase 数据表。
+老师密码在 Supabase Auth 账号中设置。启用云端模式前，在目标项目的 SQL Editor 运行 `supabase/drum-studio.sql`，将两个零值 UUID 替换为专用老师账号的 Auth User UID。然后设置对应的 GitHub Actions 仓库变量并重新部署。
+
+云端模式直接读写 Supabase，学生端每 30 秒刷新公开课表。现有本地课表和体验数据不会自动上传。
 
 ## 目录结构
 
@@ -84,7 +85,7 @@ drum-studio/
 - 右上角「体验版」或在地址末尾加 `#demo`，可以试用学生课表、学生名单和老师排课。
 - 体验版使用独立的示例数据，修改只保留在本次页面会话中。请使用示例姓名。
 - GitHub Pages 由 `.github/workflows/pages.yml` 构建发布。静态站点可直接访问体验版。
-- GitHub Pages 无法运行本地 Vite 密码服务。配置仓库变量可启用 Supabase Auth 登录；课表跨设备同步另需共享数据接口。
+- GitHub Pages 无法运行本地 Vite 密码服务。应用数据库脚本并配置仓库变量后，可启用 Supabase 登录和课表同步。
 - 正式数据在当前版本保存在浏览器。已有课程的姓名也可在老师的选单中复用。
 
 ## 文档
