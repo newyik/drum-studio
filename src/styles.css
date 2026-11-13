@@ -777,6 +777,9 @@ body:has(.sheet[open]) {
 }
 
 .contact-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
   font-weight: 600;
   letter-spacing: 0.04em;
 }
@@ -1552,6 +1555,8 @@ body:has(.sheet[open]) {
   background: var(--bg);
   overflow-wrap: anywhere;
 }
+
+.admin-actions { flex-wrap: wrap; justify-content: flex-end; }
 
 .admin-actions .ghost {
   min-height: 42px;

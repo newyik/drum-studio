@@ -24,6 +24,26 @@ import {
   type ContactSlot,
 } from './calendar';
 
+interface ContactDetails {
+  wechat: string;
+  line: string;
+}
+
+const EMPTY_CONTACT: ContactDetails = { wechat: '', line: '' };
+const CONTACT_KEY = 'drum-studio-contact-v1';
+
+function loadContactDetails(): ContactDetails {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CONTACT_KEY) ?? 'null');
+    return {
+      wechat: typeof saved?.wechat === 'string' ? saved.wechat : '',
+      line: typeof saved?.line === 'string' ? saved.line : '',
+    };
+  } catch {
+    return EMPTY_CONTACT;
+  }
+}
+
 const STUDENTS_KEY = 'drum-studio-students-v1';
 const DEMO_STUDENTS = ['体验学生 A', '体验学生 B'];
 const STORAGE_KEY = 'drum-studio-proto-v1';
@@ -76,6 +96,8 @@ function Studio({ demo }: { demo: boolean }) {
   const [weekStart, setWeekStart] = useState<Date>(() => studioWeek());
   const [location] = useState<StudioLocation>(LOCATIONS[0]);
   const [contact, setContact] = useState<{ slot?: ContactSlot } | null>(null);
+  const [contactDetails, setContactDetails] = useState(() => demo ? EMPTY_CONTACT : loadContactDetails());
+  const [contactSettingsOpen, setContactSettingsOpen] = useState(false);
   const [storageError, setStorageError] = useState(false);
 
   useEffect(() => {
@@ -155,6 +177,7 @@ function Studio({ demo }: { demo: boolean }) {
           onSave={saveEntry}
           onDelete={deleteEntry}
           onReset={resetDemo}
+          onContactSettings={() => setContactSettingsOpen(true)}
           students={[...new Set([...students, ...locationEntries.flatMap((entry) => entry.type === 'lesson' && entry.student ? [entry.student] : [])])]}
           onAddStudent={(name) => setStudents((previous) => [...new Set([...previous, name])])}
         />
@@ -177,7 +200,18 @@ function Studio({ demo }: { demo: boolean }) {
           }}
         />
       )}
-      {contact && <ContactSheet slot={contact.slot} location={location.name} onClose={() => setContact(null)} />}
+      {view === 'admin' && contactSettingsOpen && (
+        <ContactSettings
+          initial={contactDetails}
+          onClose={() => setContactSettingsOpen(false)}
+          onSave={(details) => {
+            if (!demo) localStorage.setItem(CONTACT_KEY, JSON.stringify(details));
+            setContactDetails(details);
+            setContactSettingsOpen(false);
+          }}
+        />
+      )}
+      {contact && <ContactSheet details={contactDetails} slot={contact.slot} location={location.name} onClose={() => setContact(null)} />}
     </div>
   );
 }
@@ -353,6 +387,7 @@ interface AdminProps extends WeekProps {
   onSave: (entry: Entry) => void;
   onDelete: (id: string) => void;
   onReset: () => void;
+  onContactSettings: () => void;
   students: string[];
   onAddStudent: (name: string) => void;
 }
@@ -365,6 +400,7 @@ function AdminView({
   onSave,
   onDelete,
   onReset,
+  onContactSettings,
   students,
   onAddStudent,
 }: AdminProps) {
@@ -420,6 +456,7 @@ function AdminView({
       <div className="admin-toolbar">
         <WeekNav weekStart={weekStart} onWeekChange={onWeekChange} />
         <div className="admin-actions">
+          <button className="ghost" onClick={onContactSettings}>联系方式</button>
           <button className="ghost" onClick={() => setRosterOpen(true)}>学生名单</button>
           <button className="btn-add" onClick={() => openNew(activeSelected, 540, 'lesson')}>＋ 排课</button>
         </div>
@@ -868,7 +905,52 @@ function TeacherLogin({ onClose, onLogin }: { onClose: () => void; onLogin: () =
   );
 }
 
-function ContactSheet({ slot, location, onClose }: {
+function ContactSettings({ initial, onClose, onSave }: {
+  initial: ContactDetails;
+  onClose: () => void;
+  onSave: (details: ContactDetails) => void;
+}) {
+  const [form, setForm] = useState(initial);
+  const [error, setError] = useState('');
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      onSave({ wechat: form.wechat.trim(), line: form.line.trim() });
+    } catch {
+      setError('无法保存联系方式，请检查浏览器存储设置后重试。');
+    }
+  }
+
+  return (
+    <Sheet onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="sheet-head">
+          <h2 id="sheet-title">联系方式</h2>
+          <button type="button" className="iconbtn" aria-label="关闭" onClick={onClose}>×</button>
+        </div>
+        <p className="sheet-sub">保存后，学生可在「联系老师约课」中看到。留空会隐藏该项。</p>
+        <div className="field">
+          <label htmlFor="contact-wechat">微信号</label>
+          <input id="contact-wechat" value={form.wechat} maxLength={100} onChange={(event) => {
+            setForm({ ...form, wechat: event.target.value });
+          }} />
+        </div>
+        <div className="field">
+          <label htmlFor="contact-line">LINE ID</label>
+          <input id="contact-line" value={form.line} maxLength={100} onChange={(event) => {
+            setForm({ ...form, line: event.target.value });
+          }} />
+        </div>
+        {error && <p className="error" role="alert">{error}</p>}
+        <button type="submit" className="btn-primary">保存联系方式</button>
+      </form>
+    </Sheet>
+  );
+}
+
+function ContactSheet({ slot, location, details, onClose }: {
+  details: ContactDetails;
   slot?: ContactSlot;
   location: string;
   onClose: () => void;
@@ -899,10 +981,12 @@ function ContactSheet({ slot, location, onClose }: {
         </div>
       )}
       <p className="sheet-sub">请和老师确认日期与时间。老师确认后会更新课表。</p>
-      <div className="contact-list">
-        <div className="contact-row"><span>微信</span><strong>待填写</strong></div>
-        <div className="contact-row"><span>LINE</span><strong>待填写</strong></div>
-      </div>
+      {details.wechat || details.line ? (
+        <div className="contact-list">
+          {details.wechat && <div className="contact-row"><span>微信</span><strong>{details.wechat}</strong></div>}
+          {details.line && <div className="contact-row"><span>LINE</span><strong>{details.line}</strong></div>}
+        </div>
+      ) : <p className="hint">老师还未填写联系方式。</p>}
       {slotText && (
         <>
           <button type="button" className="btn-primary" onClick={copyTime}>复制约课信息</button>
