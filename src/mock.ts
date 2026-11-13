@@ -1,5 +1,5 @@
 import type { Entry, StudioLocation } from './types';
-import { addDays, studioWeek, toISO } from './utils';
+import { addDays, fromISO, studioTime, studioWeek, toISO } from './utils';
 
 export const LOCATIONS: StudioLocation[] = [
   { id: 'shinjuku', name: '新宿', address: '东京都新宿区 · 地址待补充' },
@@ -8,9 +8,9 @@ export const LOCATIONS: StudioLocation[] = [
 const uid = () => crypto.randomUUID();
 
 /** Demo schedule for the current week, so the prototype always looks alive. */
-export function createSeed(locationId: string): Entry[] {
-  const monday = studioWeek();
-  const day = (i: number) => toISO(addDays(monday, i));
+export function createSeed(locationId: string, fromToday = false): Entry[] {
+  const firstDate = fromToday ? fromISO(studioTime().date) : studioWeek();
+  const day = (i: number) => toISO(addDays(firstDate, i));
 
   const make = (
     i: number,

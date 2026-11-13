@@ -44,7 +44,8 @@ function loadEntries(): Entry[] {
   } catch {
     /* ignore broken storage */
   }
-  return createSeed(LOCATIONS[0].id);
+  return ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+    ? createSeed(LOCATIONS[0].id) : [];
 }
 
 export default function App() {
@@ -68,7 +69,7 @@ function loadStudents(): string[] {
 }
 
 function Studio({ demo }: { demo: boolean }) {
-  const [entries, setEntries] = useState<Entry[]>(() => demo ? createSeed(LOCATIONS[0].id) : loadEntries());
+  const [entries, setEntries] = useState<Entry[]>(() => demo ? createSeed(LOCATIONS[0].id, true) : loadEntries());
   const [students, setStudents] = useState<string[]>(() => demo ? DEMO_STUDENTS : loadStudents());
   const [loginOpen, setLoginOpen] = useState(false);
   const [view, setView] = useState<'public' | 'admin'>('public');
@@ -110,7 +111,7 @@ function Studio({ demo }: { demo: boolean }) {
 
   function resetDemo() {
     if (window.confirm('重置为示例数据？你手动添加的安排会丢失。')) {
-      setEntries(createSeed(location.id));
+      setEntries(createSeed(location.id, demo));
       if (demo) setStudents(DEMO_STUDENTS);
       setWeekStart(studioWeek());
     }
