@@ -63,7 +63,7 @@ select:focus-visible {
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
-  padding: 0 18px 130px;
+  padding: 0 18px 40px;
 }
 
 /* ---------- top bar ---------- */
@@ -401,36 +401,6 @@ h1 {
   letter-spacing: 0.03em;
 }
 
-/* ---------- contact bar ---------- */
-
-.contactbar {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 30;
-  display: flex;
-  justify-content: center;
-  padding: 14px 18px calc(14px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, var(--bg) 64%, rgba(245, 240, 231, 0));
-  pointer-events: none;
-}
-
-.contactbtn {
-  width: 100%;
-  max-width: 684px;
-  padding: 14px;
-  border: 0;
-  border-radius: 15px;
-  background: var(--ink);
-  color: #f8f3ea;
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  box-shadow: 0 12px 30px rgba(33, 29, 23, 0.22);
-  pointer-events: auto;
-}
-
 /* ---------- admin ---------- */
 
 .admin-hero {
@@ -755,35 +725,6 @@ body:has(.sheet[open]) {
   background: #ad4630;
 }
 
-.contact-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.contact-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #f8f4ec;
-  font-size: 12.5px;
-}
-
-.contact-row span {
-  color: var(--muted);
-}
-
-.contact-row strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  text-align: right;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
 @keyframes rise {
   from {
     transform: translateY(16px);
@@ -806,7 +747,7 @@ body:has(.sheet[open]) {
 
 @media (min-width: 640px) {
   .app {
-    padding: 0 24px 130px;
+    padding: 0 24px 40px;
   }
 
   .topbar {
@@ -1110,14 +1051,6 @@ body:has(.sheet[open]) {
   color: var(--green);
 }
 
-.cal-block.free {
-  cursor: pointer;
-}
-
-.cal-block.free:hover {
-  background: #dcebdc;
-}
-
 .cal-block.lesson {
   background: var(--gray-soft);
   border-left-color: #b6aa97;
@@ -1307,10 +1240,6 @@ body:has(.sheet[open]) {
     max-width: 1080px;
   }
 
-  .contactbtn {
-    max-width: 1032px;
-  }
-
   .cal-mobile {
     display: none;
   }
@@ -1332,20 +1261,6 @@ body:has(.sheet[open]) {
   color: var(--muted);
 }
 
-@media (min-width: 900px) {
-  .contactbar {
-    padding-bottom: 18px;
-    background: transparent;
-  }
-
-  .contactbtn {
-    max-width: 320px;
-    padding: 12px 24px;
-    border-radius: 999px;
-    font-size: 12.5px;
-  }
-}
-
 .cal-block {
   justify-content: flex-start;
   padding-top: 5px;
@@ -1364,24 +1279,6 @@ body:has(.sheet[open]) {
   color: #b0a594;
   font-size: 11.5px;
   pointer-events: none;
-}
-
-.contact-selection {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 16px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--green-soft);
-  color: var(--green);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.copy-status {
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 @media (max-width: 639px) {
@@ -1525,11 +1422,6 @@ body:has(.sheet[open]) {
   background: var(--green-soft);
 }
 
-.cal-block.free:hover,
-.cal-block.free:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--green);
-}
-
 .demo-banner {
   margin: 12px 0 0;
   padding: 8px 12px;
@@ -1565,10 +1457,6 @@ body:has(.sheet[open]) {
 
 .admin-toolbar {
   align-items: center;
-}
-
-.contactbtn:hover {
-  background: #3d4937;
 }
 
 @media (min-width: 900px) {

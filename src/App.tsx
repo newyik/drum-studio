@@ -21,28 +21,7 @@ import {
   WeekStrip,
   freeMinutes,
   useNow,
-  type ContactSlot,
 } from './calendar';
-
-interface ContactDetails {
-  wechat: string;
-  line: string;
-}
-
-const EMPTY_CONTACT: ContactDetails = { wechat: '', line: '' };
-const CONTACT_KEY = 'drum-studio-contact-v1';
-
-function loadContactDetails(): ContactDetails {
-  try {
-    const saved = JSON.parse(localStorage.getItem(CONTACT_KEY) ?? 'null');
-    return {
-      wechat: typeof saved?.wechat === 'string' ? saved.wechat : '',
-      line: typeof saved?.line === 'string' ? saved.line : '',
-    };
-  } catch {
-    return EMPTY_CONTACT;
-  }
-}
 
 const STUDENTS_KEY = 'drum-studio-students-v1';
 const DEMO_STUDENTS = ['体验学生 A', '体验学生 B'];
@@ -95,9 +74,6 @@ function Studio({ demo }: { demo: boolean }) {
   const [view, setView] = useState<'public' | 'admin'>('public');
   const [weekStart, setWeekStart] = useState<Date>(() => studioWeek());
   const [location] = useState<StudioLocation>(LOCATIONS[0]);
-  const [contact, setContact] = useState<{ slot?: ContactSlot } | null>(null);
-  const [contactDetails, setContactDetails] = useState(() => demo ? EMPTY_CONTACT : loadContactDetails());
-  const [contactSettingsOpen, setContactSettingsOpen] = useState(false);
   const [storageError, setStorageError] = useState(false);
 
   useEffect(() => {
@@ -166,7 +142,6 @@ function Studio({ demo }: { demo: boolean }) {
         <PublicView
           entries={locationEntries}
           location={location}
-          onContact={(slot) => setContact({ slot })}
         />
       ) : (
         <AdminView
@@ -177,18 +152,9 @@ function Studio({ demo }: { demo: boolean }) {
           onSave={saveEntry}
           onDelete={deleteEntry}
           onReset={resetDemo}
-          onContactSettings={() => setContactSettingsOpen(true)}
           students={[...new Set([...students, ...locationEntries.flatMap((entry) => entry.type === 'lesson' && entry.student ? [entry.student] : [])])]}
           onAddStudent={(name) => setStudents((previous) => [...new Set([...previous, name])])}
         />
-      )}
-
-      {view === 'public' && (
-        <div className="contactbar">
-          <button className="contactbtn" onClick={() => setContact({})}>
-            联系老师约课
-          </button>
-        </div>
       )}
 
       {loginOpen && (
@@ -200,18 +166,6 @@ function Studio({ demo }: { demo: boolean }) {
           }}
         />
       )}
-      {view === 'admin' && contactSettingsOpen && (
-        <ContactSettings
-          initial={contactDetails}
-          onClose={() => setContactSettingsOpen(false)}
-          onSave={(details) => {
-            if (!demo) localStorage.setItem(CONTACT_KEY, JSON.stringify(details));
-            setContactDetails(details);
-            setContactSettingsOpen(false);
-          }}
-        />
-      )}
-      {contact && <ContactSheet details={contactDetails} slot={contact.slot} location={location.name} onClose={() => setContact(null)} />}
     </div>
   );
 }
@@ -261,10 +215,9 @@ function WeekNav({ weekStart, onWeekChange, today, atCurrentWeek }: WeekProps & 
 interface PublicProps {
   entries: Entry[];
   location: StudioLocation;
-  onContact: (slot: ContactSlot) => void;
 }
 
-function PublicView({ entries, location, onContact }: PublicProps) {
+function PublicView({ entries, location }: PublicProps) {
   const now = useNow();
   const { date: todayISO, minute } = studioTime(now);
   const today = fromISO(todayISO);
@@ -361,7 +314,6 @@ function PublicView({ entries, location, onContact }: PublicProps) {
           mode="public"
           isToday={activeSelected === todayISO}
           now={now}
-          onFreeClick={onContact}
         />
       </div>
 
@@ -372,7 +324,6 @@ function PublicView({ entries, location, onContact }: PublicProps) {
           todayISO={todayISO}
           mode="public"
           now={now}
-          onFreeClick={onContact}
         />
       </div>
 
@@ -387,7 +338,6 @@ interface AdminProps extends WeekProps {
   onSave: (entry: Entry) => void;
   onDelete: (id: string) => void;
   onReset: () => void;
-  onContactSettings: () => void;
   students: string[];
   onAddStudent: (name: string) => void;
 }
@@ -400,7 +350,6 @@ function AdminView({
   onSave,
   onDelete,
   onReset,
-  onContactSettings,
   students,
   onAddStudent,
 }: AdminProps) {
@@ -456,7 +405,6 @@ function AdminView({
       <div className="admin-toolbar">
         <WeekNav weekStart={weekStart} onWeekChange={onWeekChange} />
         <div className="admin-actions">
-          <button className="ghost" onClick={onContactSettings}>联系方式</button>
           <button className="ghost" onClick={() => setRosterOpen(true)}>学生名单</button>
           <button className="btn-add" onClick={() => openNew(activeSelected, 540, 'lesson')}>＋ 排课</button>
         </div>
@@ -901,98 +849,6 @@ function TeacherLogin({ onClose, onLogin }: { onClose: () => void; onLogin: () =
           {pending ? '登录中…' : '登录'}
         </button>
       </form>
-    </Sheet>
-  );
-}
-
-function ContactSettings({ initial, onClose, onSave }: {
-  initial: ContactDetails;
-  onClose: () => void;
-  onSave: (details: ContactDetails) => void;
-}) {
-  const [form, setForm] = useState(initial);
-  const [error, setError] = useState('');
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    try {
-      onSave({ wechat: form.wechat.trim(), line: form.line.trim() });
-    } catch {
-      setError('无法保存联系方式，请检查浏览器存储设置后重试。');
-    }
-  }
-
-  return (
-    <Sheet onClose={onClose}>
-      <form onSubmit={submit}>
-        <div className="sheet-head">
-          <h2 id="sheet-title">联系方式</h2>
-          <button type="button" className="iconbtn" aria-label="关闭" onClick={onClose}>×</button>
-        </div>
-        <p className="sheet-sub">保存后，学生可在「联系老师约课」中看到。留空会隐藏该项。</p>
-        <div className="field">
-          <label htmlFor="contact-wechat">微信号</label>
-          <input id="contact-wechat" value={form.wechat} maxLength={100} onChange={(event) => {
-            setForm({ ...form, wechat: event.target.value });
-          }} />
-        </div>
-        <div className="field">
-          <label htmlFor="contact-line">LINE ID</label>
-          <input id="contact-line" value={form.line} maxLength={100} onChange={(event) => {
-            setForm({ ...form, line: event.target.value });
-          }} />
-        </div>
-        {error && <p className="error" role="alert">{error}</p>}
-        <button type="submit" className="btn-primary">保存联系方式</button>
-      </form>
-    </Sheet>
-  );
-}
-
-function ContactSheet({ slot, location, details, onClose }: {
-  details: ContactDetails;
-  slot?: ContactSlot;
-  location: string;
-  onClose: () => void;
-}) {
-  const [copyStatus, setCopyStatus] = useState('');
-  const slotText = slot && `${slot.date} ${toHM(slot.start)}–${toHM(slot.end)}（日本时间）`;
-
-  async function copyTime() {
-    try {
-      await navigator.clipboard.writeText(`老师你好，我想约${location}的架子鼓课。${slotText}这段时间方便吗？`);
-      setCopyStatus('已复制约课信息');
-    } catch {
-      setCopyStatus('复制失败，可以长按或选中上方时间手动复制。');
-    }
-  }
-
-  return (
-    <Sheet onClose={onClose}>
-      <div className="sheet-handle" />
-      <div className="sheet-head">
-        <h2 id="sheet-title">联系老师约课</h2>
-        <button type="button" className="iconbtn" aria-label="关闭" onClick={onClose}>×</button>
-      </div>
-      {slotText && (
-        <div className="contact-selection">
-          <span>{location}</span>
-          <strong>{slotText}</strong>
-        </div>
-      )}
-      <p className="sheet-sub">请和老师确认日期与时间。老师确认后会更新课表。</p>
-      {details.wechat || details.line ? (
-        <div className="contact-list">
-          {details.wechat && <div className="contact-row"><span>微信</span><strong>{details.wechat}</strong></div>}
-          {details.line && <div className="contact-row"><span>LINE</span><strong>{details.line}</strong></div>}
-        </div>
-      ) : <p className="hint">老师还未填写联系方式。</p>}
-      {slotText && (
-        <>
-          <button type="button" className="btn-primary" onClick={copyTime}>复制约课信息</button>
-          <div className="copy-status" role="status">{copyStatus}</div>
-        </>
-      )}
     </Sheet>
   );
 }

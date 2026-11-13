@@ -18,12 +18,6 @@ const DAY_END = 1380;
 const DAY_SPAN = DAY_END - DAY_START;
 const HOURS = Array.from({ length: 15 }, (_, i) => DAY_START + i * 60);
 
-export interface ContactSlot {
-  date: string;
-  start: number;
-  end: number;
-}
-
 export type Mode = 'public' | 'admin';
 
 type BlockKind = 'free' | EntryType;
@@ -105,15 +99,11 @@ function blockText(block: CalBlock, mode: Mode): { title: string; sub?: string }
 
 function BusyBlock({
   block,
-  iso,
   mode,
-  onFreeClick,
   onEntryClick,
 }: {
   block: CalBlock;
-  iso: string;
   mode: Mode;
-  onFreeClick?: (slot: ContactSlot) => void;
   onEntryClick?: (entry: Entry) => void;
 }) {
   const text = blockText(block, mode);
@@ -128,14 +118,6 @@ function BusyBlock({
       {(!compact || block.kind === 'practice') && text.sub && <span className="cal-block-sub">{text.sub}</span>}
     </>
   );
-
-  if (mode === 'public' && block.kind === 'free') {
-    return (
-      <button type="button" className={className} style={style} onClick={() => onFreeClick?.({ date: iso, start: block.start, end: block.end })}>
-        {body}
-      </button>
-    );
-  }
 
   if (mode === 'admin' && block.entry) {
     return (
@@ -237,7 +219,6 @@ interface TimelineProps {
   mode: Mode;
   isToday: boolean;
   now: Date;
-  onFreeClick?: (slot: ContactSlot) => void;
   onEntryClick?: (entry: Entry) => void;
   onEmptyClick?: (iso: string, start: number) => void;
 }
@@ -248,7 +229,6 @@ export function DayTimeline({
   mode,
   isToday,
   now,
-  onFreeClick,
   onEntryClick,
   onEmptyClick,
 }: TimelineProps) {
@@ -311,9 +291,7 @@ export function DayTimeline({
               <BusyBlock
                 key={`${block.kind}-${block.start}-${i}`}
                 block={block}
-                iso={iso}
                 mode={mode}
-                onFreeClick={onFreeClick}
                 onEntryClick={onEntryClick}
               />
             ))}
@@ -341,7 +319,6 @@ interface CalendarProps {
   todayISO: string;
   mode: Mode;
   now: Date;
-  onFreeClick?: (slot: ContactSlot) => void;
   onEntryClick?: (entry: Entry) => void;
   onEmptyClick?: (iso: string, start: number) => void;
 }
@@ -352,7 +329,6 @@ export function WeekCalendar({
   todayISO,
   mode,
   now,
-  onFreeClick,
   onEntryClick,
   onEmptyClick,
 }: CalendarProps) {
@@ -430,9 +406,7 @@ export function WeekCalendar({
                   <BusyBlock
                     key={`${block.kind}-${block.start}-${i}`}
                     block={block}
-                    iso={iso}
                     mode={mode}
-                    onFreeClick={onFreeClick}
                     onEntryClick={onEntryClick}
                   />
                 ))}
