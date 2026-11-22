@@ -15,7 +15,7 @@
 需要 Node.js 18+。
 
 ```bash
-cd /Users/yumi/Workspaces/deepseek-harness/default-workspace/drum-studio
+cd "/Users/yumi/Documents/Projects(yumi项目)/shared-apps/drum-studio"
 
 npm install
 npm run dev
